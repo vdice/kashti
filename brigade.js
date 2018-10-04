@@ -29,12 +29,12 @@ class E2eJob extends Job {
 }
 
 class ACRBuildJob extends Job {
-  constructor(name, img, tag, dir, registry, username, token) {
+  constructor(name, img, tag, dir, registry, username, token, tenant) {
     super(name, "microsoft/azure-cli:latest");
     let imgName = img + ":" + tag;
     this.tasks = [
-      // username and token intended to be service principal (un and pw) with proper perms on the container registry.
-      `az acr login -n ${registry} -u ${username} -p ${token}`,
+      // service principal should have proper perms on the container registry.
+      `az login --service-principal -u ${username} -p ${token} --tenant ${tenant}`,
       `cd ${dir}`,
       `echo '========> building ${img}...'`,
       `az acr build -r ${registry} -t ${imgName} .`,
@@ -69,8 +69,8 @@ function githubRelease(e, project) {
 
   let parts = gh.ref.split("/", 3);
   let tag = parts[2];
-  var releaser = new ACRBuildJob(`${projectName}-release`, projectName, tag, "/src", project.secrets.acrName, project.secrets.acrUsername, project.secrets.acrToken);
-  var latestReleaser = new ACRBuildJob(`${projectName}-release-latest`, projectName, "latest", "/src", project.secrets.acrName, project.secrets.acrUsername, project.secrets.acrToken);
+  var releaser = new ACRBuildJob(`${projectName}-release`, projectName, tag, "/src", project.secrets.acrName, project.secrets.acrUsername, project.secrets.acrToken, project.secrets.acrTenant);
+  var latestReleaser = new ACRBuildJob(`${projectName}-release-latest`, projectName, "latest", "/src", project.secrets.acrName, project.secrets.acrUsername, project.secrets.acrToken, project.secrets.acrTenant);
   Group.runAll([start, releaser, latestReleaser])
     .catch(err => {
       return ghNotify("failure", `failed release ${e.buildID}`, e, project).run()
