@@ -29,17 +29,18 @@ class E2eJob extends Job {
 }
 
 class ACRBuildJob extends Job {
-  constructor(name, img, tag, dir, registry, token, tenant) {
+  constructor(name, img, tag, dir, registry, username, token, tenant) {
     super(name, "microsoft/azure-cli:latest");
     let imgName = img + ":" + tag;
     this.env = {
       AZURE_CONTAINER_REGISTRY: registry,
       ACR_TOKEN: token,
-      ACR_TENANT: tenant,
+      ACR_USERNAME: username,
+      ACR_TENANT: tenant
     }
     this.tasks = [
-      // Create a service principal and assign it proper perms on the container registry.
-      `az login --service-principal -u $AZURE_CONTAINER_REGISTRY -p $ACR_TOKEN --tenant $ACR_TENANT`,
+      // username and token intended to be service principal (un and pw) with proper perms on the container registry.
+      `az login --service-principal -u ${ACR_USERNAME} -p ${ACR_TOKEN} --tenant ${ACR_TENANT}`,
       `cd ${dir}`,
       `echo '========> building ${img}...'`,
       `az acr build -r ${registry} -t ${imgName} .`,
@@ -69,21 +70,21 @@ function test() {
 
 function githubRelease(e, project) {
   const gh = JSON.parse(e.payload);
-  if (gh.ref.startsWith("refs/tags/") || gh.ref == "refs/heads/master") {
-    const start = ghNotify("pending", `release started as ${e.buildID}`, e, project)
+  // if (gh.ref.startsWith("refs/tags/") || gh.ref == "refs/heads/master") {
+  const start = ghNotify("pending", `release started as ${e.buildID}`, e, project)
 
-    let parts = gh.ref.split("/", 3);
-    let tag = parts[2];
-    var releaser = new ACRBuildJob(`${projectName}-release`, projectName, tag, "/src", project.secrets.acrName, project.secrets.acrToken, project.secrets.acrTenant);
-    var latestReleaser = new ACRBuildJob(`${projectName}-release-latest`, projectName, "latest", "/src", project.secrets.acrName, project.secrets.acrToken, project.secrets.acrTenant);
-    Group.runAll([start, releaser, latestReleaser])
-      .catch(err => {
-        return ghNotify("failure", `failed release ${e.buildID}`, e, project).run()
-      });
-    return ghNotify("success", `release ${e.buildID} finished successfully`, e, project).run()
-  } else {
-    console.log('not a tag or a push to master; skipping')
-  }
+  let parts = gh.ref.split("/", 3);
+  let tag = parts[2];
+  var releaser = new ACRBuildJob(`${projectName}-release`, projectName, tag, "/src", project.secrets.acrName, project.secrets.acrUsername, project.secrets.acrToken, project.secrets.acrTenant);
+  var latestReleaser = new ACRBuildJob(`${projectName}-release-latest`, projectName, "latest", "/src", project.secrets.acrName, project.secrets.acrUsername, project.secrets.acrToken, project.secrets.acrTenant);
+  Group.runAll([start, releaser, latestReleaser])
+    .catch(err => {
+      return ghNotify("failure", `failed release ${e.buildID}`, e, project).run()
+    });
+  return ghNotify("success", `release ${e.buildID} finished successfully`, e, project).run()
+  // } else {
+  //   console.log('not a tag or a push to master; skipping')
+  // }
 }
 
 function githubTest(e, project) {
