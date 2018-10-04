@@ -32,15 +32,9 @@ class ACRBuildJob extends Job {
   constructor(name, img, tag, dir, registry, username, token, tenant) {
     super(name, "microsoft/azure-cli:latest");
     let imgName = img + ":" + tag;
-    this.env = {
-      AZURE_CONTAINER_REGISTRY: registry,
-      ACR_TOKEN: token,
-      ACR_USERNAME: username,
-      ACR_TENANT: tenant
-    }
     this.tasks = [
       // username and token intended to be service principal (un and pw) with proper perms on the container registry.
-      `az login --service-principal -u ${ACR_USERNAME} -p ${ACR_TOKEN} --tenant ${ACR_TENANT}`,
+      `az login --service-principal -u ${username} -p ${token} --tenant ${tenant}`,
       `cd ${dir}`,
       `echo '========> building ${img}...'`,
       `az acr build -r ${registry} -t ${imgName} .`,
