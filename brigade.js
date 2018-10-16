@@ -29,17 +29,38 @@ class E2eJob extends Job {
 }
 
 class ACRBuildJob extends Job {
-  constructor(name, img, tag, dir, registry, username, token, tenant) {
+  constructor(name, img, tag, project) {
     super(name, "microsoft/azure-cli:latest");
-    let acrImgPrefix = "public/deis/"
-    let imgName = img + ":" + tag;
+    let imgName = "public/deis/" + img + ":" + tag;
+
     this.tasks = [
       // service principal should have proper perms on the container registry.
-      `az login --service-principal -u ${username} -p ${token} --tenant ${tenant}`,
-      `cd ${dir}`,
-      `echo '========> building ${img}...'`,
-      `az acr build -r ${registry} -t ${acrImgPrefix}${imgName} .`,
-      `echo '<======== finished building ${img}.'`
+      `az login --service-principal -u ${project.secrets.acrUsername} -p ${project.secrets.acrToken} --tenant ${project.secrets.acrTenant}`,
+      `cd /src`,
+      `echo '========> building ${imgName}...'`,
+      `az acr build -r ${project.secrets.acrName} -t ${imgName} .`,
+      `echo '<======== finished building ${imgName}.'`
+    ];
+  }
+}
+
+class DockerhubPublishJob extends Job {
+  constructor(name, img, tag, project) {
+    super(name, "docker");
+    let dockerRegistry = project.secrets.dockerhubRegistry || "docker.io";
+    let dockerOrg = project.secrets.dockerhubOrg || "deis";
+    let imgName = dockerOrg + img + ":" + tag;
+
+    this.docker.enabled = "true";
+    this.tasks = [
+      `docker login ${dockerRegistry} -u ${project.secrets.dockerhubUsername} -p ${project.secrets.dockerhubPassword}`,
+      `cd /src`,
+      `echo '========> building ${imgName}...'`,
+      `docker build -t ${imgName} .`,
+      `echo '<======== finished building ${imgName}.'`,
+      `echo '========> publishing ${imgName}...'`,
+      `docker push ${imgName}`,
+      `echo '<======== finished publishing ${imgName}.'`,
     ];
   }
 }
@@ -70,9 +91,17 @@ function githubRelease(e, project) {
 
     let parts = gh.ref.split("/", 3);
     let tag = parts[2];
-    var releaser = new ACRBuildJob(`${projectName}-release`, projectName, tag, "/src", project.secrets.acrName, project.secrets.acrUsername, project.secrets.acrToken, project.secrets.acrTenant);
-    var latestReleaser = new ACRBuildJob(`${projectName}-release-latest`, projectName, "latest", "/src", project.secrets.acrName, project.secrets.acrUsername, project.secrets.acrToken, project.secrets.acrTenant);
-    Group.runAll([start, releaser, latestReleaser])
+
+    const acrReleasers = [
+      new ACRBuildJob(`${projectName}-acr-release`, projectName, tag, project.secrets.acrName, project.secrets.acrUsername, project.secrets.acrToken, project.secrets.acrTenant),
+      new ACRBuildJob(`${projectName}-acr-release-latest`, projectName, "latest", project.secrets.acrName, project.secrets.acrUsername, project.secrets.acrToken, project.secrets.acrTenant)
+    ];
+    const dockerhubReleasers = [
+      new DockerhubPublishJob(`${projectName}-dockerhub-release`, projectName, tag),
+      new DockerhubPublishJob(`${projectName}-dockerhub-release-latest`, projectName, "latest")
+    ]
+
+    Group.runAll([start].concat(acrReleasers).concat(dockerhubReleasers))
       .then(() => {
         return ghNotify("success", `release ${e.buildID} finished successfully`, e, project).run()
       })
@@ -100,3 +129,20 @@ function githubTest(e, project) {
 events.on("exec", test);
 events.on("push", githubRelease);
 events.on("pull_request", githubTest);
+
+events.on("release_images", (e, project) => {
+  console.log(e)
+  console.log(project)
+  const acrReleasers = [
+    new ACRBuildJob(`${projectName}-acr-release-latest`, projectName, "latest", project)
+  ];
+  const dockerhubReleasers = [
+    new DockerhubPublishJob(`${projectName}-dockerhub-release-latest`, projectName, "latest", project)
+  ];
+
+  console.log(acrReleasers.concat(dockerhubReleasers));
+
+  Group.runAll(acrReleasers.concat(dockerhubReleasers));
+
+  console.log("kicked 'em off");
+});
