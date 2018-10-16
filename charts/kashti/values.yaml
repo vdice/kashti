@@ -3,7 +3,7 @@ brigade:
 
 replicaCount: 1
 image:
-  repository: deis/kashti
+  repository: mcr.microsoft.com/deis/kashti
   tag: latest
   pullPolicy: IfNotPresent
 service:

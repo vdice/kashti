@@ -25,7 +25,15 @@ value provided by `git describe --tags --always`)
 
 ## Verify
 
-Verify that your tagged version exists on DockerHub: https://hub.docker.com/r/deis/kashti/
+Verify that your tagged version exists on [MCR](https://azure.microsoft.com/en-us/services/container-registry/):
+
+```
+ $ docker pull mcr.microsoft.com/deis/kashti
+Using default tag: latest
+latest: Pulling from deis/kashti
+...
+Status: Image is up to date for mcr.microsoft.com/deis/kashti:latest
+```
 
 ## Write Release Notes
 

@@ -31,13 +31,14 @@ class E2eJob extends Job {
 class ACRBuildJob extends Job {
   constructor(name, img, tag, dir, registry, username, token, tenant) {
     super(name, "microsoft/azure-cli:latest");
+    let acrImgPrefix = "public/deis/"
     let imgName = img + ":" + tag;
     this.tasks = [
       // service principal should have proper perms on the container registry.
       `az login --service-principal -u ${username} -p ${token} --tenant ${tenant}`,
       `cd ${dir}`,
       `echo '========> building ${img}...'`,
-      `az acr build -r ${registry} -t ${imgName} .`,
+      `az acr build -r ${registry} -t ${acrImgPrefix}${imgName} .`,
       `echo '<======== finished building ${img}.'`
     ];
   }
